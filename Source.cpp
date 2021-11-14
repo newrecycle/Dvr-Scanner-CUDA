@@ -1,51 +1,44 @@
+//sys libraries
 #include <iostream>
 #include <string>
 #include <vector>
 #include <algorithm>
 #include <numeric>
-
+//defines to make sure opencv knows we have cuda
 #define HAVE_NVCUVENC
-//#undef _WIN32
 #define HAVE_NVCUVID_HEADER
 #define HAVE_OPENCV_NVCUVENC
 #define HAVE_OPENCV_CUDA_CODEC
-#define const static enum HAVE_NVCUVENC;
-#define const static enum HAVE_NVCUVID_HEADER;
+//OpenCV core imports
 #include <opencv2/core.hpp>
 #include <opencv2/core/opengl.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/bgsegm.hpp>
+//OpenCV cuda imports
 #include <opencv2/cudacodec.hpp>
 #include <opencv2/cudabgsegm.hpp>
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudafilters.hpp>
-
+//Nvidia imports
 #include <nvcuvid.h>
 #include <cuviddec.h>
 #include <cuda.h>
 #include <nvEncodeAPI.h>
-
-#include <opencv2/highgui.hpp>
-#include <opencv2/videoio.hpp>
-
-#include <opencv2/bgsegm.hpp>
-//#include <opencv2/cudalegacy/NPP_staging.hpp>
-//#include <opencv2/cudalegacy.hpp>
 #include <nppcore.h>
 #include <npp.h>
 #include <cuda_runtime.h>
+
+//Unused imports, might still need later? not sure yet
+//#include <opencv2/cudalegacy/NPP_staging.hpp>
+//#include <opencv2/cudalegacy.hpp>
 //#include <opencv2/cudev/functional/functional.hpp>
 //#include <opencv2/cudev/functional/detail/color_cvt.hpp>
 //#include <opencv2/cudev/functional/color_cvt.hpp>
 //#include <opencv2/cudev/common.hpp>
-#undef _WIN32
-#define HAVE_OPENCV_NVCUVENC
-#define HAVE_OPENCV_CUDA_CODEC
-int main(int argc, const char* argv[]) {
-    const static enum HAVE_OPENCV_NVUCENV;
 
-    const static enum HAVE_NVCUVENC;
-    const static enum HAVE_NVCUVID_HEADER;
-    const static enum HAVE_OPENCV_NVUCENV;
+int main(int argc, const char* argv[]) {
     void* hHandleDriver = nullptr;
     CUresult cuda_res = cuInit(0);
     if (cuda_res != CUDA_SUCCESS) {
