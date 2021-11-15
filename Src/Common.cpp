@@ -12,6 +12,9 @@ gpuThreadManager::gpuThreadManager(std::string fin, std::string fnameout, cv::Ma
     //vidBufIn.create(std::vector<int>(5000, 1), CV_8UC4);
 }
 
+// I AM CURRENTLY USING VERY UGLY LOCKS TO KEEP THREADS IN FRAME ORDER
+// IF YOU KNOW A BETTER WAY TO DO THIS PLEASE CREATE A GITHUB ISSUE!!!
+
 void gpuThreadManager::start()
 {   
     cv::cuda::setBufferPoolUsage(true);                           // Tell OpenCV that we are going to utilize BufferPool
