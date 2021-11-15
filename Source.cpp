@@ -39,6 +39,7 @@
 //#include <opencv2/cudev/common.hpp>
 
 int main(int argc, const char* argv[]) {
+    //INIT cuda driver!
     void* hHandleDriver = nullptr;
     CUresult cuda_res = cuInit(0);
     if (cuda_res != CUDA_SUCCESS) {
@@ -47,44 +48,79 @@ int main(int argc, const char* argv[]) {
     else {
         std::cout << "CUDA init: SUCCESS";
     };
+
+    //clock for measuring fps
+    cv::TickMeter clock;
+    std::vector<double> gpu_times;
+    int frames = 0, time = 0;
+
+    //Input and Output file names
     const std::string fname("B:\\Apex Legends\\Apex Legends 2021.07.29 - 03.52.17.03.DVR.mp4");
     const std::string oname("B:\\Apex Legends\\Apex Legends 2021.07.29 - 03.52.17.03.DVR_OUT.mp4");
-    cv::cudacodec::ChromaFormat::YUV420;
+
+    //Kernal (5x5 of ones to compare against video)
     cv::Mat kernal = cv::Mat::ones(5, 5, CV_8U);
+
+    //create video reader, get format, create video writer
     cv::Ptr<cv::cudacodec::VideoReader> d_reader = cv::cudacodec::createVideoReader(fname);
-    d_reader->format().displayArea.size().height;
-    cv::Ptr<cv::cudacodec::VideoWriter> d_writer = cv::cudacodec::createVideoWriter(oname, d_reader->format().displayArea.size(), 60.0);
+    cv::cudacodec::FormatInfo format = d_reader->format();
+    int h = format.height;
+    int w = format.width;
+    cv::VideoWriter d_writer;
+    d_writer.fourcc('X', 'V', 'I', 'D');
+    //cv::Ptr<cv::cudacodec::VideoWriter> d_writer = cv::cudacodec::createVideoWriter(oname, d_reader->format().displayArea.size(), 60.0);
+
+    //Create both cuda filters for image processing
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> bgsub = cv::cuda::createBackgroundSubtractorMOG2(500, 16.0, false);
     cv::Ptr<cv::cuda::Filter> morph = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, kernal);
-    //morph->;
-    //cv::Pts<cv::cuda
     //bgsub->setShadowThreshold(double(0));
-    cv::cuda::GpuMat c_frame_filt, c_frame_score, c_frame_mask, c_frame_grey;
-    //cv::Mat ;
-    int h = d_reader->format().displayArea.height;
-    int w = d_reader->format().displayArea.width;
-    //cv::cuda::GpuMat c_frame_rgb = cv::cuda::GpuMat(w, h, cv::cudacodec::ChromaFormat::YUV420);
-    cv::cuda::GpuMat c_frame_rgb;
-    cv::namedWindow("GPU", cv::WINDOW_NORMAL);
+    
+    //create GpuMats. not sure if I should initialize? but I will find out.
+    cv::cuda::GpuMat c_frame_filt, c_frame_score, c_frame_mask, c_frame_grey, c_frame_rgb;
+
+    //create window for seeing what frames look like
+    //cv::namedWindow("GPU", cv::WINDOW_NORMAL);
+
+    //placeholder mat because I cant render GpuMats on a normal window. This bottleneck will be soon to go.
     cv::Mat okay;
+
     for (;;) {
+        //init clock
+        clock.reset(); clock.start();
+        //get next frame, if no more frames. exit.
         if (!d_reader->nextFrame(c_frame_rgb)) { break; }
         //std::cout << c_frame_rgb.type();
         //std::cout << c_frame_rgb.depth();
-        
-        //NppStatus status = nppiNV12ToBGR_709HDTV_8u_P2C3R(cv::, c_frame_rgb.step);
+        //convert color to grey, apply background subtractorMOG2, apply Morphology ex we defined before
         cv::cuda::cvtColor(c_frame_rgb, c_frame_grey, cv::COLOR_BGRA2GRAY);
         bgsub->apply(c_frame_grey, c_frame_mask);
         morph->apply(c_frame_mask, c_frame_filt);
-        double score = cv::cuda::sum(c_frame_filt)(0) / double(w * h);
-        std::cout << score - 0.15;
+        //little math to tell us what frames have motion
+        //c_frame_filt.download(okay);
+        //double score = cv::sum(okay)(0) / (w*h);
+        double score = cv::cuda::sum(c_frame_filt)(0) / (w*h);
+        //std::cout << score - 0.15;
         //c_frame_score.upload(c_frame_mask);
         //cv::cuda::calcAbsSum(c_frame_filt, c_frame_score, c_frame_filt);
-        c_frame_filt.download(okay);
-        cv::imshow("GPU", okay);
-        if (cv::waitKey(3) > 0)
-            break;
+ 
+        //download frame to cpu
+       
+
+        //display frame
+        //cv::imshow("GPU", okay);
+        //clock and frame shenanigans
+        clock.stop();
+        gpu_times.push_back(clock.getTimeMilli());
+        frames++;
+
+        //if key pressed. exit.
+        if (cv::waitKey(3) > 0) {break;}
+
     }
+    std::sort(gpu_times.begin(), gpu_times.end());
+    double gpu_avg = std::accumulate(gpu_times.begin(), gpu_times.end(), 0.0) / gpu_times.size();
+    std::cout << "GPU : Avg : " << gpu_avg << " ms FPS : " << 1000.0 / gpu_avg << " Frames " << frames << std::endl;
+    return 0;
 }
 
 
