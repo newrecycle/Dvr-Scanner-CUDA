@@ -26,33 +26,41 @@
 #endif
 
 
-//INIT cuda driver!
 
-
-
-class gpuThreadManager
-{
+class gpuThreadManager {
+private:
 public:
     std::string fname = "";
     std::string fout = "";
     cv::Mat kernal;
-    std::vector<cv::cuda::GpuMat> vidBufIn;
-    std::vector<cv::cuda::GpuMat> vidBufCVT;
-    std::vector<cv::cuda::GpuMat> vidBufBGsub;
-    std::vector<cv::cuda::GpuMat> vidBufMorph;
-    std::vector<cv::cuda::GpuMat> vidBufOut;
 
-    std::mutex vidBufInMux;
-    std::mutex vidBufCVTMux;
-    std::mutex vidBufBGsubMux;
-    std::mutex vidBufMorphMux;
-    std::mutex vidBufOutMux;
+    std::vector<cv::cuda::GpuMat> 
+        vidBufIn,
+        vidBufBRG,
+        vidBufCVT,
+        vidBufBGsub,
+        vidBufMorph;
     
-    
+    std::vector<cv::Mat> 
+        vidBufCpu, 
+        vidBufOut;
 
-    int thNum;
+    std::mutex 
+        vidBufInMux,
+        vidBufBRGMux,
+        vidBufCVTMux,
+        vidBufBGsubMux,
+        vidBufMorphMux,
+        vidBufCpuMux,
+        vidBufOutMux;
+    
+    bool inEvent, isDone, isDoneDecode;
+
+    int thNum, h, w;
     int ident = 0;
     long long fNum = 0;
+
+    int tframes;
 
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> bgsub;
     cv::Ptr<cv::cuda::Filter> morph;
@@ -60,23 +68,27 @@ public:
     cv::Ptr<cv::cudacodec::VideoReader> d_reader;
     cv::VideoWriter d_writer;
     static cv::cudacodec::FormatInfo format;
-     bool isDone;
-    int h;
-    int w;
-    std::thread threads[5];
+
+    std::thread mainThreads[6];
     std::mutex vidInMtx;
     cv::TickMeter clock;
-    gpuThreadManager(std::string, std::string, cv::Mat kern, int threads);
-    //~gpuThreadManager(void);
-    void start();
-    void startThread();
-    void threadLoop();
 
     void startDecode();
     void startColorCVT();
     void startBGsub();
     void startMorph();
+    void startCopyToCpu();
+    bool calculateScore(cv::Mat);
     void startWriter();
-    
+
+    /*void moveFrame(cv::cuda::GpuMat in, cv::Ptr<std::vector<cv::cuda::GpuMat>>, cv::Ptr<std::mutex>);
+    void deleteFirstFrame(cv::Ptr<std::vector<cv::cuda::GpuMat>>, cv::Ptr<std::mutex>);*/
+
+    void moveFrame(cv::cuda::GpuMat in, std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock);
+    void moveFrame(cv::Mat in, std::vector<cv::Mat> *arr, std::mutex* lock);
+    void deleteFirstFrame(std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock);
+public:
+    void start();
+    gpuThreadManager(std::string, std::string, cv::Mat kern, int threads);
 };
 #endif

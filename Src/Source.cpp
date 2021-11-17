@@ -24,8 +24,8 @@ int main() {
     int frames = 0, time = 0;
 
     //Input and Output file names
-    const std::string fName("B:\\2021-11-051910_1st9hours.mp4");
-    const std::string oName("B:\\Apex Legends\\Apex Legends 2021.07.29 - 03.52.17.03.DVR_OUT.mp4");
+    const std::string fName("B:\\2021-11-04 17-36-48.mp4");
+    const std::string oName("B:\\Yo_ForReal.avi");
 
     //Kernal (5x5 of ones to compare against video)
     cv::Mat kernal = cv::Mat::ones(5, 5, CV_8U);
@@ -46,15 +46,14 @@ int main() {
 
     gpuThreadManager gpuT(fName, oName, kernal, 2);
     gpuT.start();
-    while (true) {
-        if (cv::waitKey(3) > 0) { break; }
-    }
+    std::cout << std::endl << "Exited threadManagerLoop" << std::endl;
+    Sleep(5000);
     return 0;
 }
     
     //for (;;) {
         //init clock
-       // clock.reset(); clock.start();
+        //clock.reset(); clock.start();
         //get next frame, if no more frames. exit.
         //gpuT.startDecode();
         //std::cout << c_frame_rgb.type();
