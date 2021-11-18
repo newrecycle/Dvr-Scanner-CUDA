@@ -1,14 +1,12 @@
 #include "Common.h"
-#include <Windows.h>
-#include <processthreadsapi.h>
-#include <thread>
+
 gpuThreadManager::gpuThreadManager(std::string fin, std::string fnameout, cv::Mat kern, int threads)
 {
-    fname = fin; fout = fnameout; kernal = kern; thNum = threads; fNum = 0; ident = 0; 
+    fname = fin; fout = fnameout; kernal = kern; thNum = threads; ident = 0;
     d_reader = cv::cudacodec::createVideoReader(fname);
-    
     cv::cudacodec::FormatInfo format = d_reader->format();
     d_writer = cv::VideoWriter(fnameout, cv::VideoWriter::fourcc('X', 'V', 'I', 'D'), 60, format.displayArea.size());
+    allocGpuMat.fill(cv::cuda::GpuMat(format.displayArea.size(), format.chromaFormat));
     h = format.height; format.width;
     bgsub = cv::cuda::createBackgroundSubtractorMOG2(500, 16.0, false);
     morph = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, kernal);
@@ -17,17 +15,17 @@ gpuThreadManager::gpuThreadManager(std::string fin, std::string fnameout, cv::Ma
 
 // I AM CURRENTLY USING VERY UGLY LOCKS TO KEEP THREADS IN FRAME ORDER
 // IF YOU KNOW A BETTER WAY TO DO THIS PLEASE CREATE A GITHUB ISSUE!!!
-void gpuThreadManager::moveFrame(cv::cuda::GpuMat in, std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock) {
+void gpuThreadManager::moveFrame(std::shared_ptr<cv::cuda::GpuMat> in, std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock) {
     lock->lock();
     arr->push_back(in);
     lock->unlock();
 }
-void gpuThreadManager::moveFrame(cv::Mat in, std::vector<cv::Mat> *arr, std::mutex *lock) {
+void gpuThreadManager::moveFrame(cv::Mat in, std::vector<cv::Mat> *vec, std::mutex *lock) {
     lock->lock();
-    arr->push_back(in);
+    vec->push_back(in);
     lock->unlock();
 }
-void gpuThreadManager::deleteFirstFrame(std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock) {
+void gpuThreadManager::deleteFirstFrame(std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock) {
     lock->lock();
     arr->erase(arr->begin());
     lock->unlock();
@@ -46,7 +44,7 @@ bool gpuThreadManager::calculateScore(cv::Mat temp) {
 void gpuThreadManager::start()
 {   
     //cv::cuda::setBufferPoolUsage(true);                           // Tell OpenCV that we are going to utilize BufferPool
-    //cv::cuda::setBufferPoolConfig(cv::cuda::getDevice(), 1024 * 1024 * 128, 5);  // Allocate 256 MB, 10 stacks (default is 10 MB, 5 stacks) because why not lmao
+    //cv::cuda::setBufferPoolConfig(cv::cuda::getDevice(), 1024 * 1024 * 256, 5);  // Allocate 256 MB, 10 stacks (default is 10 MB, 5 stacks) because why not lmao
     isDone = false; //we're not done yet!
     isDoneDecode = false; //we're not done yet!
     tframes = 0;
@@ -55,7 +53,8 @@ void gpuThreadManager::start()
     mainThreads[2] = std::thread(&gpuThreadManager::startBGsub, this); //start background subtract thread
     mainThreads[3] = std::thread(&gpuThreadManager::startMorph, this); //start morph thread
     mainThreads[4] = std::thread(&gpuThreadManager::startCopyToCpu, this); //start copying frames that have motion into cpu thread
-    mainThreads[5] = std::thread(&gpuThreadManager::startWriter, this); //start cpu encode thread
+    mainThreads[5] = std::thread(&gpuThreadManager::startCalculateScore, this);
+    mainThreads[6] = std::thread(&gpuThreadManager::startWriter, this); //start cpu encode thread
     clock.start();
     while (isDoneDecode == false || vidBufIn.size() != 0 || vidBufOut.size() != 0 || vidBufBRG.size() != 0) {
         Sleep(1);
@@ -65,10 +64,15 @@ void gpuThreadManager::start()
     Sleep(5000);
     isDone = true;
     Sleep(5000);
-    for (int i = 0; i <= 5; i++) {
+    for (int i = 0; i <= 6; i++) {
         mainThreads[i].join();
     }
     std::cout << clock.getTimeSec() << " Seconds" << std::endl;
+    std::cout << std::endl << fullIn << " In";
+    std::cout << std::endl << fullBRG << " Brg";
+    std::cout << std::endl << fullCVT << " CVT";
+    std::cout << std::endl << fullBGsub << " BGsub";
+    std::cout << std::endl << fullMorph << " Morph";
     
     
 }
@@ -76,23 +80,40 @@ void gpuThreadManager::start()
 void gpuThreadManager::startDecode() {
     cv::cuda::Stream streamDec = cv::cuda::Stream(CUstream_flags_enum::CU_STREAM_NON_BLOCKING);
     cv::cuda::BufferPool poolDec(streamDec);
+    cv::cuda::Stream streamCpy = cv::cuda::Stream(CUstream_flags_enum::CU_STREAM_NON_BLOCKING);
     cv::cuda::GpuMat c_frame_rgb = cv::cuda::GpuMat();
+    std::thread cp;
     //poolDec.getBuffer(d_reader->format().displayArea.size(), CV_8UC4);
     //poolDec2.getBuffer(d_reader->format().displayArea.size(), CV_8UC4);
     while (true) {
-        if (vidBufIn.size() <= 150 && vidBufBRG.size() <= 400) {
-            if (d_reader->nextFrame(c_frame_rgb, streamDec)) {
-                streamDec.waitForCompletion();
-                moveFrame(c_frame_rgb, &vidBufIn, &vidBufInMux);
-                moveFrame(c_frame_rgb.clone(), &vidBufBRG, &vidBufBRGMux);
-                tframes++;
-            } else { 
-                isDoneDecode = true; 
-                std::cout << std::endl << tframes << " Frames in ";
-                break; }
-        } else {
-            Sleep(0);
+        int i = 0;
+        while (i <= 400) {
+            if (vidBufIn.size() <= 100) {
+                if (vidBufBRG.size() <= 300) {
+                    if (d_reader->nextFrame(allocGpuMat[i], streamDec)) {
+                        streamDec.waitForCompletion();
+                        allocGpuMat[i].copyTo(allocGpuMat[i + 399], streamCpy);
+                        moveFrame(std::make_shared<cv::cuda::GpuMat>(allocGpuMat[i]), &vidBufIn, &vidBufInMux);
+                        streamCpy.waitForCompletion();
+                        moveFrame(std::make_shared<cv::cuda::GpuMat>(allocGpuMat[i + 399]), &vidBufBRG, &vidBufBRGMux);
+                        //moveFrame(std::make_shared<cv::cuda::GpuMat>(allocGpuMat[i + 399]), &vidBufBRG, &vidBufBRGMux);
+                        tframes++;
+                        i++;
+                    } else {
+                        isDoneDecode = true;
+                        std::cout << std::endl << tframes << " Frames in ";
+                        break;
+                    }
+                } else {
+                    Sleep(0);
+                    fullBRG++;
+                }
+            } else {
+                Sleep(0);
+                fullIn++;
+            }
         }
+        if (isDoneDecode) { break; }
     }
 }
 
@@ -105,15 +126,17 @@ void gpuThreadManager::startColorCVT() {
         if (vidBufCVT.size() == 0 && vidBufIn.size() == 0 && isDone == true) { 
             std::cout << colF << "COLORCVT Frames";
             break; }
-        if (vidBufCVT.size() <= 200 && vidBufIn.size() != 0) {
-            cv::cuda::cvtColor(vidBufIn[0], c_frame_grey, cv::COLOR_BGRA2GRAY, 0, streamCVT);
+        if (vidBufCVT.size() <= 100 && vidBufIn.size() != 0) {
+            vidBufInMux.lock();
+            cv::cuda::cvtColor(*vidBufIn[0], *vidBufIn[0], cv::COLOR_BGRA2GRAY, 0, streamCVT);
             streamCVT.waitForCompletion();
-            moveFrame(c_frame_grey, &vidBufCVT, &vidBufCVTMux);
+            vidBufInMux.unlock();
+            moveFrame(vidBufIn[0], &vidBufCVT, &vidBufCVTMux);
             deleteFirstFrame(&vidBufIn, &vidBufInMux);
             colF++;
-        }
-        else {
+        } else {
             Sleep(0);
+            fullCVT++;
         }
     }
 }
@@ -127,14 +150,18 @@ void gpuThreadManager::startBGsub() {
         if (vidBufBGsub.size() == 0 && vidBufCVT.size() == 0 && isDone == true) { 
             std::cout << bgsF << "BGSUB Frames";
             break;}
-        if (vidBufBGsub.size() <= 200 && vidBufCVT.size() != 0) {
-            bgsub->apply(vidBufCVT[0], c_frame_mask, -1.0, streamBGsub);
+        if (vidBufBGsub.size() <= 100 && vidBufCVT.size() != 0) {
+            vidBufCVTMux.lock();
+            bgsub->apply(*vidBufCVT[0], *vidBufCVT[0], -1.0, streamBGsub);
             streamBGsub.waitForCompletion();
+            vidBufCVTMux.unlock();
+            moveFrame(vidBufCVT[0], &vidBufBGsub, &vidBufBGsubMux);
             deleteFirstFrame(&vidBufCVT, &vidBufCVTMux);
-            moveFrame(c_frame_mask, &vidBufBGsub, &vidBufBGsubMux);
+            
             bgsF++;
         } else {
             Sleep(0);
+            fullBGsub++;
         }
     }
 }
@@ -145,52 +172,76 @@ void gpuThreadManager::startMorph() {
     int morF = 0;
     while (true) {
         if (vidBufMorph.size() == 0 && vidBufBGsub.size() == 0 && isDone == true) { 
-            std::cout << morF << "BGSUB Frames";
+            std::cout << morF << "Morph Frames";
             break;}
-        if (vidBufMorph.size() <= 200 && vidBufBGsub.size() != 0) {
-            morph->apply(vidBufBGsub[0], c_frame_filter, streamMorph);
+        if (vidBufMorph.size() <= 100 && vidBufBGsub.size() != 0) {
+            vidBufBGsubMux.lock();
+            morph->apply(*vidBufBGsub[0], *vidBufBGsub[0], streamMorph);
             streamMorph.waitForCompletion();
+            vidBufBGsubMux.unlock();
+            moveFrame(vidBufBGsub[0], &vidBufMorph, &vidBufMorphMux);
             deleteFirstFrame(&vidBufBGsub, &vidBufBGsubMux);
-            moveFrame(c_frame_filter, &vidBufMorph, &vidBufMorphMux);
             morF++;
         } else {
             Sleep(0);
+            fullMorph++;
         }
     }
 }
 void gpuThreadManager::startCopyToCpu() {
-    cv::Mat temp, temp2;
-    inEvent = false;
-    int inEventCount = 0;
+    cv::Mat temp;
+    
     while (true) {
         if (vidBufBGsub.size() == 0 && vidBufMorph.size() == 0 && isDone == true) {
             break;
         }
         if (vidBufMorph.size() != 0) {
-            vidBufMorph[0].download(temp);
-            if (calculateScore(temp)) {
+            vidBufMorphMux.lock();
+            vidBufMorph[0]->download(temp);
+            vidBufMorphMux.unlock();
+            moveFrame(temp, &vidBufCpu, &vidBufCpuMux);
+            
+            deleteFirstFrame(&vidBufMorph, &vidBufMorphMux);
+        } else {
+            Sleep(0);
+        }
+    }
+}
+
+void gpuThreadManager::startCalculateScore() {
+    inEvent = false;
+    int inEventCount = 0;
+    cv::Mat temp;
+    while (true) {
+        if (vidBufMorph.size() == 0 && vidBufCpu.size() == 0 && isDone == true) {
+            break;
+        }
+        if (vidBufCpu.size() != 0) {
+            if (calculateScore(vidBufCpu[0])) {
                 inEvent = true;
                 inEventCount = 120;
             }
             if (inEvent) {
                 if (inEventCount == 0) {
                     inEvent = false;
-                }
-                else {
+                } else {
                     vidBufBRGMux.lock();
-                    vidBufBRG[0].download(temp2);
+                    vidBufBRG[0]->download(temp);
                     vidBufBRGMux.unlock();
-                    moveFrame(temp2, &vidBufOut, &vidBufOutMux);
+                    moveFrame(temp, &vidBufOut, &vidBufOutMux);
                     inEventCount--;
                 }
             }
-            deleteFirstFrame(&vidBufMorph, &vidBufMorphMux);
+            vidBufCpuMux.lock();
+            vidBufCpu.erase(vidBufCpu.begin());
+            vidBufCpuMux.unlock();
             deleteFirstFrame(&vidBufBRG, &vidBufBRGMux);
         }
         else {
             Sleep(0);
         }
     }
+    
 }
 
 void gpuThreadManager::startWriter() {   

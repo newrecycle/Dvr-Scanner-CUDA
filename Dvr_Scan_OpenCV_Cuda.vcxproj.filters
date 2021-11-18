@@ -34,9 +34,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="ClassDiagram.cd" />
-  </ItemGroup>
-  <ItemGroup>
     <ResourceCompile Include="Dvr_Scan_OpenCV_Cuda.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>

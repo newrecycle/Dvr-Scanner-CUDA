@@ -2,15 +2,15 @@
 #include "Source.h"
 
 bool initDriver() {
-    std::cout << "Initializing Cuda";
+    std::cout << "Initializing Cuda" << std::endl;
     void* hHandleDriver = nullptr;
     CUresult cuda_res = cuInit(0);
     if (cuda_res == CUDA_SUCCESS) {
-        std::cout << "CUDA init: PASS";
+        std::cout << "CUDA init: PASS" << std::endl;
         return true;
     }
     else {
-        std::cout << "CUDA init: FAIL";
+        std::cout << "CUDA init: FAIL" << std::endl;
         return false;
     };
 }
@@ -42,7 +42,6 @@ int main() {
     //cv::namedWindow("GPU", cv::WINDOW_NORMAL);
 
     //placeholder mat because I cant render GpuMats on a normal window. This bottleneck will be soon to go.
-    cv::Mat okay;
 
     gpuThreadManager gpuT(fName, oName, kernal, 2);
     gpuT.start();

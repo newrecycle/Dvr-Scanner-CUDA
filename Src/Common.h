@@ -29,21 +29,29 @@
 
 class gpuThreadManager {
 private:
-public:
     std::string fname = "";
     std::string fout = "";
     cv::Mat kernal;
 
-    std::vector<cv::cuda::GpuMat> 
+    std::vector<std::shared_ptr<cv::cuda::GpuMat>>
         vidBufIn,
         vidBufBRG,
         vidBufCVT,
         vidBufBGsub,
         vidBufMorph;
+    int
+        fullIn,
+        fullBRG,
+        fullCVT,
+        fullBGsub,
+        fullMorph;
     
     std::vector<cv::Mat> 
         vidBufCpu, 
         vidBufOut;
+    
+    std::array<cv::cuda::GpuMat, 800> allocGpuMat;
+
 
     std::mutex 
         vidBufInMux,
@@ -56,11 +64,7 @@ public:
     
     bool inEvent, isDone, isDoneDecode;
 
-    int thNum, h, w;
-    int ident = 0;
-    long long fNum = 0;
-
-    int tframes;
+    int thNum, h, w, tframes, ident = 0;
 
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> bgsub;
     cv::Ptr<cv::cuda::Filter> morph;
@@ -69,7 +73,7 @@ public:
     cv::VideoWriter d_writer;
     static cv::cudacodec::FormatInfo format;
 
-    std::thread mainThreads[6];
+    std::thread mainThreads[7];
     std::mutex vidInMtx;
     cv::TickMeter clock;
 
@@ -78,15 +82,13 @@ public:
     void startBGsub();
     void startMorph();
     void startCopyToCpu();
-    bool calculateScore(cv::Mat);
+    void startCalculateScore();
     void startWriter();
 
-    /*void moveFrame(cv::cuda::GpuMat in, cv::Ptr<std::vector<cv::cuda::GpuMat>>, cv::Ptr<std::mutex>);
-    void deleteFirstFrame(cv::Ptr<std::vector<cv::cuda::GpuMat>>, cv::Ptr<std::mutex>);*/
-
-    void moveFrame(cv::cuda::GpuMat in, std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock);
+    bool calculateScore(cv::Mat);
+    void moveFrame(std::shared_ptr<cv::cuda::GpuMat> in, std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock);
     void moveFrame(cv::Mat in, std::vector<cv::Mat> *arr, std::mutex* lock);
-    void deleteFirstFrame(std::vector<cv::cuda::GpuMat> *arr, std::mutex *lock);
+    void deleteFirstFrame(std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock);
 public:
     void start();
     gpuThreadManager(std::string, std::string, cv::Mat kern, int threads);
