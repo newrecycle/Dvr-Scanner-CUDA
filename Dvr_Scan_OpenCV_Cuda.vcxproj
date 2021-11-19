@@ -160,11 +160,13 @@
   <ItemGroup>
     <ClCompile Include="Src\Common.cpp" />
     <ClCompile Include="Src\Source.cpp" />
+    <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
     <ClInclude Include="Src\Common.h" />
     <ClInclude Include="Src\Source.h" />
+    <ClInclude Include="thread.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Dvr_Scan_OpenCV_Cuda.rc" />
