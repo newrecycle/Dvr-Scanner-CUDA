@@ -47,10 +47,11 @@ private:
         fullMorph;
     
     std::vector<cv::Mat> 
-        vidBufCpu, 
+        //vidBufCpu, 
         vidBufOut;
     
-    std::array<cv::cuda::GpuMat, 800> allocGpuMat;
+    std::array<cv::cuda::GpuMat, 400> allocGpuMat;
+    std::array<cv::cuda::GpuMat, 400> allocGpuBRGMat;
 
 
     std::mutex 
@@ -59,7 +60,7 @@ private:
         vidBufCVTMux,
         vidBufBGsubMux,
         vidBufMorphMux,
-        vidBufCpuMux,
+        //vidBufCpuMux,
         vidBufOutMux;
     
     bool inEvent, isDone, isDoneDecode;
@@ -85,7 +86,7 @@ private:
     void startCalculateScore();
     void startWriter();
 
-    bool calculateScore(cv::Mat);
+    bool calculateScore(cv::cuda::GpuMat);
     void moveFrame(std::shared_ptr<cv::cuda::GpuMat> in, std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock);
     void moveFrame(cv::Mat in, std::vector<cv::Mat> *arr, std::mutex* lock);
     void deleteFirstFrame(std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock);
