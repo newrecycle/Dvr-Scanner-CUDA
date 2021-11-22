@@ -3,7 +3,6 @@
 gpuThreadManager::gpuThreadManager(std::string fin, std::string fnameout, cv::Mat kern, int threads)
 {
     fname = fin; fout = fnameout; kernal = kern; thNum = threads; ident = 0;
-    cv::cuda::GpuMat firstFrame;
     d_reader = cv::cudacodec::createVideoReader(fname);
     d_reader->nextFrame(firstFrame);
     cv::cudacodec::FormatInfo format = d_reader->format();
@@ -15,6 +14,19 @@ gpuThreadManager::gpuThreadManager(std::string fin, std::string fnameout, cv::Ma
     morph = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, kernal);
 
 }
+
+
+void gpuThreadManager::startLoop() {
+
+    bool isDone = false; //we're not done yet!
+    bool isDoneDecode = false; //we're not done yet!
+    int tframes = 0; // frame 0
+    std::thread decode = std::thread(&gpuThreadManager::startDecode, this); //start decode thread
+    cv::cuda::GpuMat matrix[4][8];
+    int frameNum[4][8] = {0};
+    std::fill(&matrix[0][0], &matrix[0][0] + sizeof(matrix) / sizeof(matrix[0][0]), firstFrame.clone());
+}
+
 
 // I AM CURRENTLY USING VERY UGLY LOCKS TO KEEP THREADS IN FRAME ORDER
 // IF YOU KNOW A BETTER WAY TO DO THIS PLEASE CREATE A GITHUB ISSUE!!!
@@ -133,7 +145,9 @@ void gpuThreadManager::startColorCVT() {
             break; }
         if (vidBufCVT.size() <= 100 && vidBufIn.size() != 0) {
             vidBufInMux.lock();
+            cv::cuda::Filter cvtColor = &cv::cuda::cvtColor;
             cv::cuda::cvtColor(*vidBufIn[0], *vidBufIn[0], cv::COLOR_BGRA2GRAY, 0, streamCVT);
+            colorCVT = cv::cuda::cvtColor;
             streamCVT.waitForCompletion();
             vidBufInMux.unlock();
             moveFrame(vidBufIn[0], &vidBufCVT, &vidBufCVTMux);

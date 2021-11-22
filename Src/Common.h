@@ -45,7 +45,7 @@ private:
         fullCVT,
         fullBGsub,
         fullMorph;
-    
+    cv::cuda::GpuMat firstFrame;
     std::vector<cv::Mat> 
         //vidBufCpu, 
         vidBufOut;
@@ -69,9 +69,10 @@ private:
 
     cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> bgsub;
     cv::Ptr<cv::cuda::Filter> morph;
-
+    cv::Ptr<cv::cuda::Filter> colorCVT;
     cv::Ptr<cv::cudacodec::VideoReader> d_reader;
     cv::VideoWriter d_writer;
+    
     static cv::cudacodec::FormatInfo format;
 
     std::thread mainThreads[7];
@@ -86,6 +87,7 @@ private:
     void startCalculateScore();
     void startWriter();
 
+    void startLoop();
     bool calculateScore(cv::cuda::GpuMat);
     void moveFrame(std::shared_ptr<cv::cuda::GpuMat> in, std::vector<std::shared_ptr<cv::cuda::GpuMat>> *arr, std::mutex *lock);
     void moveFrame(cv::Mat in, std::vector<cv::Mat> *arr, std::mutex* lock);

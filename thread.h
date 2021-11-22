@@ -3,6 +3,7 @@
 #define THREAD_H
 #include <nvcuvid.h>
 #include <cuviddec.h>
+#include "Src/Common.h"
 //std
 #include <iostream>
 #include <thread>
@@ -25,22 +26,36 @@
 #else
 #include <unistd.h>
 #endif
-class thread
-{
-	int thredNum;
-	std::thread me;
-	std::function<void> func;
-	std::arg args[];
+
+
+class gpuThread {
+	//private:
+	int frameNum; //frame number
+	int threadNum; //thread number
+	int w, h;
+	cv::Ptr<cv::cuda::Stream> stream; //stream pointer
+	std::array<cv::Ptr<cv::cuda::GpuMat>, 5> *in; // input & output GpuMat pointer
+	cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> *bgsub; //BGSub filter pointer
+	cv::Ptr<cv::cuda::Filter> *morph; //MorphEx filter pointer
+	std::array<cv::Ptr<cv::cuda::GpuMat>, 5> *out;
+	
+	public:
+		void initThread(
+			int tNum, //thread number
+			int w,
+			int h,
+			cv::Ptr<cv::cuda::Stream> stm, //stream pointer
+			cv::Ptr<cv::cuda::BackgroundSubtractorMOG2> bgs,  //BGSub filter pointer
+			cv::Ptr<cv::cuda::Filter> mor //MorphEx filter pointer
+		);
+		void start(std::array<cv::Ptr<cv::cuda::GpuMat>, 5>& in, std::array<cv::Ptr<cv::cuda::GpuMat>, 5>& out, int fNum);
+
 };
 
-class gpuThread : public thread
-{
+class cpuThread {
 
 };
 
-class cpuThread : public thread
-{
 
-};
 
 #endif
